@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RCE-47 Static Website</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+    }
+    .card {
+      max-width: 720px;
+      padding: 32px;
+      border-radius: 16px;
+      background: #111827;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 2rem;
+    }
+    p {
+      line-height: 1.6;
+    }
+    code {
+      background: #1f2937;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>RCE-47 Static Website Architecture</h1>
+    <p>This site is hosted in Amazon S3 and served securely through Amazon CloudFront.</p>
+    <p>Provisioned with Terraform in <code>eu-west-1</code> for the repository <code>aws-infrastructure-architectures</code>.</p>
+    <p>Owner: <code>titoiunit</code></p>
+  </div>
+</body>
+</html>
