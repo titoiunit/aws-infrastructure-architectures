@@ -1,0 +1,131 @@
+#!/bin/bash
+set -euxo pipefail
+
+dnf update -y
+dnf install -y python3 python3-pip
+
+mkdir -p /opt/rce48-webapp
+
+cat > /opt/rce48-webapp/app.py <<PYEOF
+from flask import Flask
+import pg8000
+
+app = Flask(__name__)
+
+DB_HOST = "${db_host}"
+DB_NAME = "${db_name}"
+DB_USER = "${db_user}"
+DB_PASSWORD = "${db_password}"
+DB_PORT = 5432
+
+def test_db_connection():
+    conn = pg8000.connect(
+        host=DB_HOST,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        port=DB_PORT,
+        timeout=5
+    )
+    cursor = conn.cursor()
+    cursor.execute("select current_database(), current_user, version();")
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+@app.route("/")
+def home():
+    return """
+    <html>
+      <head>
+        <title>RCE-48 Web App</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 40px;
+          }
+          .card {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #111827;
+            padding: 32px;
+            border-radius: 16px;
+          }
+          a {
+            color: #93c5fd;
+          }
+          code {
+            background: #1f2937;
+            padding: 2px 6px;
+            border-radius: 6px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>RCE-48 Web App (EC2 + RDS)</h1>
+          <p>This web app is running on an EC2 instance in <code>eu-west-1</code>.</p>
+          <p>The database is PostgreSQL on Amazon RDS in private subnets.</p>
+          <p><a href="/health">Health Check</a></p>
+          <p><a href="/db-check">Database Check</a></p>
+        </div>
+      </body>
+    </html>
+    """
+
+@app.route("/health")
+def health():
+    return "ok", 200
+
+@app.route("/db-check")
+def db_check():
+    try:
+        row = test_db_connection()
+        return f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; padding: 40px;">
+            <h1>Database connection successful</h1>
+            <p><strong>Database:</strong> {row[0]}</p>
+            <p><strong>User:</strong> {row[1]}</p>
+            <p><strong>Version:</strong> {row[2]}</p>
+          </body>
+        </html>
+        """, 200
+    except Exception as e:
+        return f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; padding: 40px;">
+            <h1>Database connection failed</h1>
+            <pre>{e}</pre>
+          </body>
+        </html>
+        """, 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=80)
+PYEOF
+
+pip3 install flask pg8000
+
+cat > /etc/systemd/system/rce48-webapp.service <<SERVICEEOF
+[Unit]
+Description=RCE-48 Web App
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rce48-webapp
+ExecStart=/usr/bin/python3 /opt/rce48-webapp/app.py
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+systemctl daemon-reload
+systemctl enable rce48-webapp
+systemctl start rce48-webapp
