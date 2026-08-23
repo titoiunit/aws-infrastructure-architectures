@@ -1,139 +1,54 @@
-# RCE-48 - Web App with EC2 and RDS
+# RCE-48 — EC2 Web App + Private PostgreSQL
 
-## Overview
-
-This project demonstrates a traditional AWS web application architecture using EC2 for compute and RDS for relational database storage.
-
-The goal was to understand how a web application can run on a virtual server while connecting to a managed database service inside AWS.
-
-This project helped me practice how compute, database, networking, security groups, and Terraform work together in a real cloud architecture.
-
-## What I built
-
-- EC2-based web application infrastructure
-- RDS database foundation
-- Terraform-based infrastructure setup
-- Security group configuration
-- Basic networking structure
-- Separation between application and database layers
+A Terraform lab for a classic AWS web-application foundation: compute is separated from the database, and the database is not internet-reachable.
 
 ## Architecture
 
-```text
-User
-→ EC2 Web Server
-→ RDS Database
+```mermaid
+flowchart LR
+    U[Internet user] --> EC2[EC2 web server<br/>public subnet]
+    SSM[AWS Systems Manager] --> EC2
+    EC2 -->|PostgreSQL 5432| RDS[(RDS PostgreSQL<br/>private DB subnets)]
 ```
 
-A more practical cloud flow:
+## What is implemented
 
-```text
-User request
-→ Public EC2 instance / web server
-→ Private database layer with RDS
-→ Application response back to user
-```
+- A dedicated VPC with one public subnet for the EC2 application host and two private database subnets in separate Availability Zones.
+- An EC2 instance running Amazon Linux 2023, with an IAM role for Systems Manager Session Manager access.
+- A PostgreSQL RDS instance with storage encryption and `publicly_accessible = false`.
+- Security groups that allow PostgreSQL traffic only from the EC2 security group — not from the internet or an arbitrary CIDR block.
+- Terraform-managed networking, instance, database, IAM, and security-group resources.
+- A generated database password for the lab deployment.
 
-## Tech stack
+## Engineering decisions
 
-- AWS
-- Terraform
-- EC2
-- RDS
-- Security Groups
-- VPC basics
-- Linux
-- Infrastructure as Code
+| Decision | Why it matters |
+| --- | --- |
+| Database in private DB subnets | Reduces the public attack surface. |
+| Security-group-to-security-group access | The database rule follows the workload identity instead of trusting a broad network range. |
+| Systems Manager instead of an SSH ingress rule | Supports controlled administration without opening port 22 to the internet. |
+| Infrastructure as Code | Makes the environment reviewable and repeatable. |
 
-## Why this architecture matters
+## Validation checklist
 
-This is one of the most common basic cloud architecture patterns.
+After applying Terraform, I would verify:
 
-Many real applications need:
+1. The EC2 instance is reachable through Session Manager.
+2. The RDS endpoint cannot be reached directly from the public internet.
+3. The application host can establish a PostgreSQL connection on port 5432.
+4. The RDS security group has no public PostgreSQL ingress.
+5. `terraform destroy` removes the lab resources after testing.
 
-- a compute layer to run application code
-- a database layer to store data
-- network rules to control access
-- infrastructure that can be recreated consistently
+## Deliberate lab trade-offs
 
-Using EC2 and RDS helped me understand how a traditional web application can be deployed in AWS and how the application layer connects to the database layer.
+This is a cost-conscious learning environment, not a production template. The current configuration keeps RDS Multi-AZ disabled, retains no automated backup window, and skips the final snapshot on deletion. The generated database password is also passed to the instance bootstrap for lab simplicity.
 
-## Key learning areas
+For production I would move secrets to AWS Secrets Manager with rotation, enable backups and deletion protection, use Multi-AZ when the availability target requires it, put an ALB and an Auto Scaling Group in front of the application, and document recovery objectives.
 
-### EC2 for compute
+## 30-second interview story
 
-EC2 represents the server layer of the application.
-
-This helped me understand:
-
-- how virtual machines are used in cloud environments
-- how applications can run on cloud compute resources
-- how access to servers should be controlled
-
-### RDS for database
-
-RDS represents the managed relational database layer.
-
-This helped me understand:
-
-- why databases should be separated from application servers
-- how managed database services reduce operational work
-- why database access should be restricted
-
-### Security groups
-
-Security groups control which traffic is allowed between resources.
-
-This helped me understand:
-
-- how to allow web traffic to the application
-- how to restrict database access
-- why cloud networking rules are important for security
-
-### Terraform and Infrastructure as Code
-
-Terraform was used to define the infrastructure in code.
-
-This helped me understand:
-
-- how infrastructure can be version controlled
-- how cloud resources can be created repeatedly
-- how documentation and code can support each other
-
-## What I learned
-
-Through this project, I practiced:
-
-- how EC2 and RDS work together in a web application architecture
-- how to separate application and database layers
-- how security groups control access between resources
-- how Terraform can define cloud infrastructure
-- how to explain a traditional cloud architecture clearly
+> I built a Terraform-managed EC2 and RDS baseline to demonstrate a traditional web architecture. The important control was not just creating the services: the database is private, encrypted, and only accepts PostgreSQL traffic from the application security group. I used Systems Manager for host access rather than exposing SSH. I also documented the lab-versus-production trade-offs around secrets, backups, and availability.
 
 ## Cost and cleanup
 
-This project is built for learning and portfolio purposes.
-
-Important cleanup principle:
-
-```text
-Destroy AWS resources after testing to avoid unnecessary cost.
-```
-
-Resources such as EC2 instances and RDS databases can create ongoing cost if left running.
-
-## Future improvements
-
-Possible next improvements:
-
-- add an Application Load Balancer
-- place the database in private subnets
-- add better architecture diagrams
-- add deployment screenshots
-- add monitoring with CloudWatch
-- add backup and recovery notes
-- add a full cleanup proof section
-
-## Status
-
-Completed hands-on AWS architecture project for learning EC2, RDS, Terraform, and traditional web application infrastructure.
+RDS and EC2 can incur charges while running. Run `terraform destroy` after testing and confirm that the DB instance, EC2 instance, VPC resources, and security groups were removed.
