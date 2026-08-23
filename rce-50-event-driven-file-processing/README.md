@@ -1,157 +1,58 @@
-# RCE-50 - Event-Driven File Processing
+# RCE-50 — Event-Driven File Processing
 
-## Overview
-
-This project demonstrates an event-driven file processing architecture on AWS using S3, Lambda, and messaging concepts such as SNS / SQS.
-
-The goal was to understand how cloud systems can react automatically when a file is uploaded.
-
-This project helped me practice how storage events, serverless compute, event triggers, and Terraform work together in an event-driven cloud architecture.
-
-## What I built
-
-- S3 bucket for file uploads
-- Event trigger for new uploaded files
-- AWS Lambda function for file processing logic
-- Terraform-based infrastructure setup
-- Basic event-driven workflow
-- Foundation for asynchronous cloud processing
+A Terraform lab for automatically processing uploaded text files. S3 events invoke Lambda, which writes a processed object and emits a message to SQS.
 
 ## Architecture
 
-```text
-File upload
-→ S3 Bucket
-→ Lambda Trigger
-→ File processing logic
-→ Optional notification / queue
+```mermaid
+flowchart LR
+    U[Uploader] --> S3[(S3 bucket<br/>uploads/*.txt)]
+    S3 --> L[Lambda processor]
+    L --> P[(S3 bucket<br/>processed/)]
+    L --> Q[SQS queue]
+    L --> CW[CloudWatch Logs<br/>7-day retention]
 ```
 
-A more practical cloud flow:
+## What is implemented
 
-```text
-User uploads a file
-→ S3 stores the file
-→ S3 event triggers Lambda
-→ Lambda processes the file
-→ Result can be logged, stored, queued, or sent as a notification
-```
+- A private S3 bucket with bucket-owner-enforced object ownership and server-side encryption.
+- An S3 event notification that invokes Lambda only for objects under the `uploads/` prefix with a `.txt` suffix.
+- A Lambda function with permissions restricted to read from `uploads/`, write to `processed/`, and send messages to the queue.
+- An SQS queue for the asynchronous result/message path.
+- A dedicated CloudWatch log group with seven-day retention.
+- Terraform-managed bucket policy, notification permission, Lambda, queue, IAM, and observability resources.
 
-## Tech stack
+## Engineering decisions
 
-- AWS
-- Terraform
-- S3
-- Lambda
-- SNS / SQS concepts
-- Python
-- Event-driven architecture
-- Infrastructure as Code
+| Decision | Why it matters |
+| --- | --- |
+| Prefix and suffix event filter | Prevents unrelated objects from invoking the function. |
+| Separate upload and processed prefixes | Makes the data flow clear and avoids an accidental recursive trigger. |
+| SQS message after processing | Decouples downstream work from the file-processing function. |
+| Prefix-level IAM permissions | Reduces the function’s access to only the required data paths. |
+| Private, encrypted bucket | Keeps uploaded material out of public object storage. |
 
-## Why this architecture matters
+## Validation checklist
 
-Event-driven architecture is useful when a system needs to react automatically to something that happens.
+1. Upload a small `.txt` file to the `uploads/` prefix.
+2. Confirm that Lambda is invoked and logs are present.
+3. Check that the expected result is written under `processed/`.
+4. Inspect the SQS queue for the resulting message.
+5. Upload a file outside the allowed prefix or suffix and confirm it does not trigger the processor.
+6. Run `terraform destroy` after testing.
 
-Instead of constantly checking for new files, the system can wait for an event and then trigger the correct processing logic.
+## Production hardening next
 
-This pattern is common in cloud systems such as:
+- Add a dead-letter queue and an explicit retry/replay procedure.
+- Make processing idempotent so duplicate S3 event delivery is safe.
+- Add object validation, malware/content scanning, and a clearer schema contract if inputs become untrusted.
+- Emit metrics and alarms for processing failures, queue depth, and age of the oldest message.
+- Use SNS fan-out only if multiple independent consumers need the result; this implementation intentionally uses SQS.
 
-- image processing
-- document processing
-- log processing
-- data pipelines
-- automation workflows
-- file upload systems
+## 30-second interview story
 
-This project helped me understand how AWS services can work together without requiring a constantly running server.
-
-## Key learning areas
-
-### S3 for file storage
-
-S3 acts as the storage layer for uploaded files.
-
-This helped me understand:
-
-- how files can be stored in cloud object storage
-- how S3 can trigger events
-- why object storage is useful for file-based workflows
-
-### Lambda for processing
-
-Lambda runs the processing logic when a file event happens.
-
-This helped me understand:
-
-- how serverless functions can react to events
-- how backend logic can run only when needed
-- how event triggers can replace manual or scheduled checks
-
-### Event-driven workflow
-
-The system is built around events instead of direct user requests.
-
-This helped me understand:
-
-- how cloud services can react automatically
-- how event-driven systems reduce manual work
-- how asynchronous workflows can improve scalability
-
-### SNS / SQS concepts
-
-Messaging services can be used to send notifications or queue work for later processing.
-
-This helped me understand:
-
-- how notifications can be sent after an event
-- how queues can decouple services
-- why asynchronous processing is useful in cloud systems
-
-### Terraform and Infrastructure as Code
-
-Terraform was used to define the infrastructure in code.
-
-This helped me understand:
-
-- how event-driven infrastructure can be created repeatably
-- how storage, compute, and messaging resources connect together
-- how Infrastructure as Code supports documentation and version control
-
-## What I learned
-
-Through this project, I practiced:
-
-- how S3 events can trigger Lambda functions
-- how event-driven systems work in AWS
-- how serverless compute can process uploaded files
-- how SNS / SQS concepts support asynchronous architecture
-- how Terraform can define event-driven cloud infrastructure
-- how to explain an event-driven architecture clearly
+> I built an asynchronous file-processing path rather than polling S3 or keeping a server running. S3 invokes the processor only for `uploads/*.txt`, Lambda writes results to a separate prefix, and the next stage receives an SQS message. I used path-level IAM permissions and called out idempotency, retries, and a DLQ as the next production concerns.
 
 ## Cost and cleanup
 
-This project is built for learning and portfolio purposes.
-
-Important cleanup principle:
-
-```text
-Destroy AWS resources after testing to avoid unnecessary cost.
-```
-
-Storage buckets, Lambda functions, queues, topics, and related resources should be removed after testing.
-
-## Future improvements
-
-Possible next improvements:
-
-- add screenshots of file upload testing
-- add example input and output files
-- add CloudWatch log screenshots
-- add SNS notification example
-- add SQS queue processing example
-- add better architecture diagrams
-- add a full cleanup proof section
-
-## Status
-
-Completed hands-on AWS architecture project for learning S3, Lambda, event-driven workflows, Terraform, and asynchronous cloud processing.
+Empty the bucket before destruction if objects remain, then run `terraform destroy`. Verify that the Lambda, queue, log group, bucket notification, and bucket are removed.
