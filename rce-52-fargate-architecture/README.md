@@ -1,167 +1,58 @@
-# RCE-52 - Fargate Architecture
+# RCE-52 — ECS Fargate + ALB + Private RDS
 
-## Overview
-
-This project demonstrates a containerized AWS application architecture using ECS Fargate.
-
-The goal was to understand how containerized applications can run in AWS without manually managing virtual machines.
-
-This project helped me practice how Docker, ECS, Fargate, networking concepts, and Terraform work together in a modern cloud application architecture.
-
-## What I built
-
-- Containerized application architecture
-- ECS / Fargate deployment foundation
-- Docker-based application packaging
-- Terraform-based infrastructure setup
-- Basic serverless container workflow
-- Foundation for scalable containerized cloud applications
+A Terraform lab for a containerized web-service architecture. It combines an internet-facing Application Load Balancer, an ECS Fargate service, a private PostgreSQL database, encrypted object storage, and CloudWatch logging.
 
 ## Architecture
 
-```text
-User request
-→ Application entry point
-→ ECS / Fargate service
-→ Running container task
-→ Application response
+```mermaid
+flowchart LR
+    U[Internet user] --> ALB[Application Load Balancer<br/>public subnets]
+    ALB --> ECS[ECS Fargate service<br/>nginx container]
+    ECS -->|PostgreSQL 5432| RDS[(RDS PostgreSQL<br/>private DB subnets)]
+    ECS --> CW[CloudWatch Logs<br/>7-day retention]
+    S3[(Encrypted S3 assets)] 
 ```
 
-A more practical cloud flow:
+## What is implemented
 
-```text
-Application code
-→ Docker image
-→ ECS task definition
-→ Fargate service runs the container
-→ AWS manages the server infrastructure
-→ User receives application response
-```
+- Reusable Terraform modules for networking, the Fargate application, and the data layer.
+- A VPC with two public and two private subnets across two Availability Zones.
+- An internet-facing ALB with an HTTP listener and target health checks.
+- An ECS cluster, Fargate task definition, and ECS service running a small nginx container image.
+- Security groups that allow the service to receive traffic only from the ALB and allow PostgreSQL access only from the ECS task security group.
+- A private RDS PostgreSQL instance in database subnets with storage encryption.
+- An encrypted S3 assets bucket with public access blocked and bucket-owner-enforced ownership.
+- A dedicated CloudWatch log group with seven-day retention.
 
-## Tech stack
+## Engineering decisions
 
-- AWS
-- Terraform
-- ECS
-- Fargate
-- Docker
-- Containers
-- Security Groups
-- Infrastructure as Code
+| Decision | Why it matters |
+| --- | --- |
+| ALB in front of ECS | Provides a stable public entry point and health-check boundary. |
+| Task-to-database security-group rule | Keeps database access tied to the workload rather than an open CIDR range. |
+| Separate Terraform modules | Makes network, service, and data responsibilities easier to review and evolve. |
+| Encrypted, private RDS and S3 | Establishes secure defaults for stored data. |
+| Short log retention | Keeps operational evidence while limiting the cost of a learning environment. |
 
-## Why this architecture matters
+## Validation checklist
 
-Containerized applications are common in modern cloud environments.
+1. Apply the Terraform configuration and retrieve the ALB DNS name from the outputs.
+2. Confirm the ALB target is healthy and the service returns the expected nginx response.
+3. Verify that the ECS task security group has no direct public ingress.
+4. Confirm that the RDS instance is not publicly accessible and accepts PostgreSQL only from the ECS task security group.
+5. Inspect the CloudWatch log group and ECS service events.
+6. Run `terraform destroy` after the test and confirm the ALB, service, database, and VPC resources are removed.
 
-Fargate is useful because it allows containers to run without directly managing EC2 servers.
+## Deliberate lab trade-offs and production path
 
-This means the cloud engineer can focus more on:
+The service currently assigns public IPs to Fargate tasks in public subnets to keep the lab network simple. The RDS instance has Multi-AZ, backups, deletion protection, and final snapshots disabled for cost-conscious experimentation. The task image is a public nginx image, and the database password is generated for the Terraform deployment.
 
-- application packaging
-- infrastructure definition
-- networking
-- scaling
-- deployment structure
-- security rules
+For a production workload I would run the tasks in private subnets, use NAT or VPC endpoints only where justified, store credentials in Secrets Manager, enable the database recovery controls that match the RTO/RPO, use a private image supply chain (for example ECR), add ECS service autoscaling, HTTPS with ACM, WAF where appropriate, and a controlled deployment strategy such as blue/green.
 
-instead of manually maintaining virtual machines.
+## 30-second interview story
 
-Common use cases include:
-
-- web applications
-- backend services
-- APIs
-- microservices
-- containerized internal tools
-- scalable application workloads
-
-## Key learning areas
-
-### Docker and containers
-
-Docker is used to package the application and its dependencies into a container image.
-
-This helped me understand:
-
-- how applications can run consistently across environments
-- why containers reduce "works on my machine" problems
-- how application packaging connects to cloud deployment
-
-### ECS
-
-ECS is the AWS container orchestration service.
-
-This helped me understand:
-
-- how AWS manages container workloads
-- how services and task definitions are used
-- how containers can be deployed in a structured way
-
-### Fargate
-
-Fargate runs containers without requiring direct EC2 server management.
-
-This helped me understand:
-
-- how serverless containers work
-- how container infrastructure can be managed by AWS
-- why Fargate is useful for simpler container deployments
-
-### Networking and security
-
-Containerized applications still need correct networking and access rules.
-
-This helped me understand:
-
-- how containers receive traffic
-- why security groups matter
-- how cloud networking affects application availability and security
-
-### Terraform and Infrastructure as Code
-
-Terraform was used to define the infrastructure in code.
-
-This helped me understand:
-
-- how container infrastructure can be created repeatably
-- how ECS, Fargate, networking, and security resources connect together
-- how Infrastructure as Code supports documentation and version control
-
-## What I learned
-
-Through this project, I practiced:
-
-- how Docker connects application code to cloud deployment
-- how ECS and Fargate support containerized workloads
-- how serverless containers differ from traditional virtual machines
-- how Terraform can define container infrastructure
-- how networking and security groups affect containerized applications
-- how to explain a container architecture clearly
+> I built a modular ECS Fargate architecture where the ALB owns the public entry point, the task only trusts the ALB security group, and the RDS database only trusts the task security group. I deliberately kept a few settings cheap for the lab, then documented the concrete changes I would make for production: private task networking, secrets management, durable RDS settings, observability, and a safer deployment path.
 
 ## Cost and cleanup
 
-This project is built for learning and portfolio purposes.
-
-Important cleanup principle:
-
-```text
-Destroy AWS resources after testing to avoid unnecessary cost.
-```
-
-Fargate services, ECS resources, networking resources, load balancers, and related infrastructure can create ongoing cost if left running.
-
-## Future improvements
-
-Possible next improvements:
-
-- add an Application Load Balancer
-- add autoscaling for the Fargate service
-- add CloudWatch logs
-- add deployment screenshots
-- add architecture diagrams
-- add GitHub Actions deployment workflow
-- add a full cleanup proof section
-
-## Status
-
-Completed hands-on AWS architecture project for learning Docker, ECS, Fargate, Terraform, and containerized cloud application deployment.
+The ALB, Fargate tasks, and RDS instance can generate cost while active. Destroy the stack immediately after validation and check that the ECS service, ALB, target group, database, S3 bucket contents, log group, and network resources are gone.
