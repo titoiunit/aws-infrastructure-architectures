@@ -1,156 +1,53 @@
-# RCE-51 - EC2 Auto Scaling
+# RCE-51 — EC2 Auto Scaling
 
-## Overview
-
-This project demonstrates a scalable AWS compute architecture using EC2 Auto Scaling.
-
-The goal was to understand how cloud infrastructure can automatically adjust compute capacity based on demand.
-
-This project helped me practice how EC2 instances, launch templates, Auto Scaling Groups, load balancing concepts, and Terraform work together in a scalable cloud architecture.
-
-## What I built
-
-- EC2 Auto Scaling architecture
-- Launch template foundation
-- Auto Scaling Group configuration
-- Terraform-based infrastructure setup
-- Basic scalable compute structure
-- Foundation for high availability and demand-based scaling
+A Terraform lab that shows how EC2 capacity can grow and shrink from CloudWatch CPU alarms. It focuses on a repeatable launch configuration and the operational mechanics of an Auto Scaling Group.
 
 ## Architecture
 
-```text
-User request
-→ Load balancing layer
-→ Auto Scaling Group
-→ EC2 instances
-→ Application response
+```mermaid
+flowchart LR
+    U[Internet traffic] --> ASG[Auto Scaling Group<br/>min 1 · desired 1 · max 2]
+    ASG --> A[EC2 instance<br/>public subnet A]
+    ASG --> B[EC2 instance<br/>public subnet B]
+    CW[CloudWatch CPU alarms] -->|scale out / scale in| ASG
+    SSM[AWS Systems Manager] --> ASG
 ```
 
-A more practical cloud flow:
+## What is implemented
 
-```text
-User traffic increases
-→ Load balancing layer distributes requests
-→ Auto Scaling Group manages EC2 capacity
-→ New EC2 instances can be added when needed
-→ Application remains more available under changing demand
-```
+- A VPC with two public subnets in separate Availability Zones and an Internet Gateway.
+- An EC2 launch template using a small instance type and Amazon Linux, with an IAM role for Systems Manager access.
+- An Auto Scaling Group with EC2 health checks, minimum capacity of 1, desired capacity of 1, and maximum capacity of 2.
+- A CPU-high alarm that adds capacity at 70% or above and a CPU-low alarm that removes capacity at 20% or below.
+- Terraform-managed networking, launch template, IAM, alarms, and Auto Scaling resources.
 
-## Tech stack
+## Design decisions
 
-- AWS
-- Terraform
-- EC2
-- Auto Scaling Groups
-- Launch Templates
-- Load Balancing concepts
-- Security Groups
-- Infrastructure as Code
+| Decision | Why it matters |
+| --- | --- |
+| Launch template | Ensures every replacement instance starts from the same versioned configuration. |
+| Two Availability Zones | Gives the group placement options rather than anchoring it to one subnet. |
+| EC2 health checks | Lets the group replace an unhealthy instance at the infrastructure layer. |
+| Separate scale-out and scale-in thresholds | Avoids a single alarm trying to solve both capacity directions. |
+| Systems Manager role | Allows operational access without a public SSH rule. |
 
-## Why this architecture matters
+## Validation checklist
 
-Auto Scaling is important because cloud applications should not depend on only one manually managed server.
+1. Confirm that the group initially maintains one healthy instance.
+2. Generate controlled CPU load and observe the scale-out alarm and activity history.
+3. Remove the load and observe the low-CPU policy return capacity toward the minimum.
+4. Terminate an instance intentionally in a lab environment and confirm that the Auto Scaling Group replaces it.
+5. Review the launch template, alarm thresholds, and group activity history.
+6. Run `terraform destroy` after testing.
 
-A scalable architecture can help applications handle changing traffic more reliably.
+## Deliberate lab boundary
 
-This project helped me understand how AWS can manage compute capacity more automatically instead of requiring manual server management.
+This lab does **not** include an Application Load Balancer. Instances use public subnets so the scaling mechanics can be studied with a small footprint. For a production web service I would place instances in private subnets behind an ALB, use ALB target health checks, use target-tracking or request-based scaling where appropriate, and add dashboards, alarms, and deployment controls.
 
-Common use cases include:
+## 30-second interview story
 
-- web applications with changing traffic
-- applications that need better availability
-- systems that should recover from instance failure
-- infrastructure that should scale based on demand
-- production-style compute environments
-
-## Key learning areas
-
-### EC2 for compute
-
-EC2 represents the virtual machine layer of the application.
-
-This helped me understand:
-
-- how cloud servers run application workloads
-- how compute resources support application hosting
-- why one server is often not enough for production-style systems
-
-### Launch Templates
-
-Launch templates define how new EC2 instances should be created.
-
-This helped me understand:
-
-- how instance configuration can be reused
-- how Auto Scaling Groups know what type of instances to launch
-- why repeatable server configuration matters
-
-### Auto Scaling Groups
-
-Auto Scaling Groups manage the number of EC2 instances.
-
-This helped me understand:
-
-- how AWS can add or remove compute capacity
-- how infrastructure can respond to changing demand
-- how scaling supports availability and reliability
-
-### Load balancing concepts
-
-A load balancing layer helps distribute traffic across multiple instances.
-
-This helped me understand:
-
-- why traffic should not depend on one server
-- how requests can be shared across multiple instances
-- how load balancing supports scalable architecture
-
-### Terraform and Infrastructure as Code
-
-Terraform was used to define the infrastructure in code.
-
-This helped me understand:
-
-- how scalable infrastructure can be created repeatably
-- how EC2, launch templates, and Auto Scaling Groups connect together
-- how Infrastructure as Code supports documentation and version control
-
-## What I learned
-
-Through this project, I practiced:
-
-- how EC2 Auto Scaling works
-- how launch templates support repeatable instance creation
-- how Auto Scaling Groups manage compute capacity
-- how scalable cloud architecture improves reliability
-- how Terraform can define scaling infrastructure
-- how to explain an auto scaling architecture clearly
+> I built a small Auto Scaling Group to demonstrate that scaling is a control loop, not simply a second EC2 instance. The launch template makes replacement instances consistent, CloudWatch high/low CPU alarms drive capacity changes, and the group maintains a minimum healthy baseline. I was explicit that a real public web service would put private instances behind an ALB and use application-level health checks.
 
 ## Cost and cleanup
 
-This project is built for learning and portfolio purposes.
-
-Important cleanup principle:
-
-```text
-Destroy AWS resources after testing to avoid unnecessary cost.
-```
-
-EC2 instances, Auto Scaling Groups, load balancers, and related resources can create ongoing cost if left running.
-
-## Future improvements
-
-Possible next improvements:
-
-- add an Application Load Balancer
-- add scaling policies based on CPU usage
-- add CloudWatch metrics and alarms
-- add deployment screenshots
-- add health check configuration notes
-- add better architecture diagrams
-- add a full cleanup proof section
-
-## Status
-
-Completed hands-on AWS architecture project for learning EC2 Auto Scaling, launch templates, Terraform, and scalable compute infrastructure.
+Auto Scaling can create replacement or additional EC2 instances during testing. Before teardown, set expectations around the desired capacity, then run `terraform destroy` and confirm that the group, launch template, alarms, instances, and network resources are removed.
