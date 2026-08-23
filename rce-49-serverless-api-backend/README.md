@@ -1,138 +1,59 @@
-# RCE-49 - Serverless API Backend
+# RCE-49 — Serverless API Backend
 
-## Overview
-
-This project demonstrates a serverless backend architecture on AWS using API Gateway, Lambda, and DynamoDB.
-
-The goal was to understand how a backend API can be built without managing servers directly.
-
-This project helped me practice how API requests, serverless compute, database storage, and Terraform work together in a cloud-native backend architecture.
-
-## What I built
-
-- API Gateway entry point
-- AWS Lambda function for backend logic
-- DynamoDB table for data storage
-- Terraform-based infrastructure setup
-- Basic serverless request flow
-- Lightweight backend API architecture
+A Terraform lab for a small HTTP API built from API Gateway, Lambda, and DynamoDB. It demonstrates serverless request handling with a private network path to the data layer.
 
 ## Architecture
 
-```text
-Client request
-→ API Gateway
-→ Lambda
-→ DynamoDB
-→ JSON response
+```mermaid
+flowchart LR
+    C[API client] --> API[API Gateway HTTP API]
+    API --> L[Lambda<br/>private subnets]
+    L --> EP[DynamoDB gateway endpoint]
+    EP --> DB[(DynamoDB table)]
+    L --> CW[CloudWatch Logs<br/>7-day retention]
 ```
 
-A more practical cloud flow:
+## What is implemented
 
-```text
-User / client
-→ API Gateway receives HTTP request
-→ Lambda runs backend logic
-→ DynamoDB stores or reads data
-→ Lambda returns response
-→ API Gateway sends response back to client
-```
+- API Gateway HTTP API routes: `GET /health`, `GET /items`, and `POST /items`.
+- A Python 3.13 Lambda function running in private subnets.
+- A DynamoDB table with server-side encryption and deliberately small provisioned read/write capacity for the lab.
+- A gateway VPC endpoint for DynamoDB, attached to the private route table.
+- Lambda IAM permissions restricted to the table actions the implementation needs: `GetItem`, `PutItem`, and `Scan`.
+- A dedicated CloudWatch log group with seven-day retention.
+- Terraform-managed API, network, IAM, compute, logging, endpoint, and database resources.
 
-## Tech stack
+## Why the design is useful
 
-- AWS
-- Terraform
-- API Gateway
-- Lambda
-- DynamoDB
-- Python
-- Serverless architecture
-- Infrastructure as Code
+| Decision | Why it matters |
+| --- | --- |
+| API Gateway in front of Lambda | Separates the public HTTP surface from application execution. |
+| Lambda in private subnets | Keeps application compute out of the public network path. |
+| DynamoDB gateway endpoint | Lets the Lambda reach DynamoDB without a NAT gateway for this traffic. |
+| Least-privilege table actions | Makes the Lambda role easier to review and limits blast radius. |
+| Short log retention | Keeps diagnostic evidence while controlling lab cost. |
 
-## Why this architecture matters
+## Validation checklist
 
-Serverless architecture is useful when an application needs backend functionality without managing traditional servers.
+1. Call `GET /health` and confirm a successful response.
+2. Create an item with `POST /items`, then retrieve it with `GET /items`.
+3. Confirm Lambda logs are written to the dedicated CloudWatch log group.
+4. Review the Lambda execution role and verify that it does not have broad DynamoDB access.
+5. Confirm the private route table is associated with the DynamoDB gateway endpoint.
+6. Run `terraform destroy` after the test.
 
-Instead of provisioning and maintaining virtual machines, the backend can use managed AWS services that scale based on demand.
+## Production hardening next
 
-This project helped me understand how cloud-native APIs can be built using smaller managed components that work together.
+- Add authentication and authorization (for example JWT/OIDC or IAM, depending on the client).
+- Define API throttling, structured request logging, dashboards, and alarms.
+- Enable DynamoDB point-in-time recovery when the recovery requirement justifies it.
+- Add an endpoint policy and tighten data access further if the workload grows.
+- Use a more explicit API contract, validation, and error-handling strategy.
 
-## Key learning areas
+## 30-second interview story
 
-### API Gateway
-
-API Gateway acts as the public entry point for the backend API.
-
-This helped me understand:
-
-- how HTTP requests enter a serverless backend
-- how routes can connect to backend logic
-- why an API entry point is needed before Lambda
-
-### Lambda
-
-Lambda runs the backend logic without requiring a server to be managed manually.
-
-This helped me understand:
-
-- how serverless functions work
-- how code can run only when triggered
-- how backend logic can be separated into small functions
-
-### DynamoDB
-
-DynamoDB provides a serverless NoSQL database layer.
-
-This helped me understand:
-
-- how data can be stored without managing a database server
-- how serverless applications can use managed databases
-- why DynamoDB fits well with event-driven and serverless systems
-
-### Terraform and Infrastructure as Code
-
-Terraform was used to define the infrastructure in code.
-
-This helped me understand:
-
-- how serverless resources can be created repeatably
-- how API, compute, and database resources can be managed together
-- how Infrastructure as Code supports documentation and version control
-
-## What I learned
-
-Through this project, I practiced:
-
-- how API Gateway, Lambda, and DynamoDB work together
-- how serverless APIs are structured
-- how backend logic can run without managing servers
-- how Terraform can define serverless infrastructure
-- how to explain a serverless request flow clearly
+> I chose a serverless API for an event-sized workload where I did not want to operate a web server. The API Gateway routes invoke a Lambda in private subnets, and the function reaches DynamoDB through a gateway endpoint rather than through a NAT path. I restricted the Lambda role to the exact table actions used by the API and kept log retention short for a cost-aware lab. Next I would add authentication, throttling, observability, and recovery controls.
 
 ## Cost and cleanup
 
-This project is built for learning and portfolio purposes.
-
-Important cleanup principle:
-
-```text
-Destroy AWS resources after testing to avoid unnecessary cost.
-```
-
-Serverless services can be cost-efficient, but resources should still be cleaned up after testing.
-
-## Future improvements
-
-Possible next improvements:
-
-- add API request examples
-- add screenshots of API testing
-- add better architecture diagrams
-- add error handling examples
-- add authentication with Cognito or IAM
-- add CloudWatch logging notes
-- add a full cleanup proof section
-
-## Status
-
-Completed hands-on AWS architecture project for learning API Gateway, Lambda, DynamoDB, Terraform, and serverless backend design.
+The lab uses small serverless resources, but they should still be removed when no longer needed. Run `terraform destroy` and confirm that the API, Lambda, DynamoDB table, log group, VPC endpoint, and networking resources are gone.
