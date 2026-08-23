@@ -1,141 +1,56 @@
-# RCE-47 - Static Website Hosting
+# RCE-47 — Private S3 Static Website + CloudFront
 
-## Overview
-
-This project demonstrates a simple static website hosting architecture on AWS.
-
-The goal was to understand how static website files can be hosted in the cloud using AWS services and how a simple frontend project can be documented as part of a cloud infrastructure portfolio.
-
-This project helped me practice the basic flow of hosting static content, organizing project files, and thinking about simple cloud delivery architecture.
-
-## What I built
-
-- Static website project structure
-- Basic HTML / frontend files
-- Cloud hosting architecture foundation
-- Documentation for static website deployment
-- Foundation for S3 and CloudFront style hosting
-- Simple portfolio-ready website example
+A Terraform lab for delivering a static website securely without making the S3 bucket public. CloudFront is the public edge, and Origin Access Control is the only permitted path to the bucket.
 
 ## Architecture
 
-```text
-User
-→ Static website endpoint
-→ HTML / CSS / frontend files
-→ Website displayed in browser
+```mermaid
+flowchart LR
+    U[Browser] --> CF[CloudFront distribution]
+    CF -->|Origin Access Control| S3[(Private S3 website bucket)]
 ```
 
-A more practical AWS cloud flow:
+## What is implemented
 
-```text
-User request
-→ CloudFront / website endpoint
-→ S3 static website files
-→ Browser renders the website
-```
+- A dedicated S3 bucket for the static site with public access blocked.
+- Bucket-owner-enforced object ownership and default server-side encryption.
+- A CloudFront distribution with the S3 bucket as its origin.
+- Origin Access Control (OAC) between CloudFront and S3.
+- A bucket policy that permits reads from the CloudFront service only for the specific distribution source ARN.
+- Viewer HTTP-to-HTTPS redirect and normal CloudFront caching behaviour.
+- Terraform-managed upload and delivery infrastructure.
 
-## Tech stack
+## Why this is stronger than a public S3 website bucket
 
-- AWS
-- S3 concepts
-- CloudFront concepts
-- HTML
-- CSS
-- Static website hosting
-- Cloud infrastructure basics
+| Decision | Why it matters |
+| --- | --- |
+| Public access block enabled | Prevents direct public access to the bucket. |
+| CloudFront OAC | Gives CloudFront a controlled identity for reading the origin. |
+| Distribution-specific bucket policy | Avoids granting broad anonymous S3 read access. |
+| HTTPS redirect | Protects users from unencrypted viewer traffic. |
+| Terraform | Makes the security controls reviewable and repeatable. |
 
-## Why this architecture matters
+## Validation checklist
 
-Static website hosting is one of the simplest and most useful cloud architecture patterns.
+1. Upload the site content through the Terraform configuration.
+2. Open the CloudFront distribution domain and confirm the page is served.
+3. Request the HTTP URL and confirm it redirects to HTTPS.
+4. Attempt to access a known S3 object directly and confirm that it is not publicly readable.
+5. Confirm the bucket policy references the intended CloudFront distribution source ARN.
+6. After the CloudFront deployment completes, run `terraform destroy` and verify the bucket is empty before deletion.
 
-It is commonly used for:
+## Production hardening next
 
-- portfolio websites
-- landing pages
-- documentation sites
-- simple frontend projects
-- marketing pages
-- static web applications
+- Add a custom domain with ACM-managed TLS certificates.
+- Add Route 53 DNS records and a cache invalidation deployment step.
+- Introduce WAF only when the exposure and threat model justify it.
+- Add security headers, monitoring, and an explicit release/rollback plan.
+- Put build and content validation into CI/CD before publishing.
 
-This project helped me understand how cloud storage and content delivery can be used to host simple websites without running a traditional server.
+## 30-second interview story
 
-## Key learning areas
-
-### Static website hosting
-
-Static websites do not need a backend server for every request.
-
-This helped me understand:
-
-- how HTML, CSS, and frontend files can be served directly
-- why static hosting is simple and cost-effective
-- how cloud storage can be used for website delivery
-
-### S3 concepts
-
-S3 can be used to store static website files such as HTML, CSS, JavaScript, and images.
-
-This helped me understand:
-
-- how object storage works
-- how files can be organized for website hosting
-- why S3 is useful for static content
-
-### CloudFront concepts
-
-CloudFront can be used as a content delivery layer in front of static website files.
-
-This helped me understand:
-
-- how content delivery networks improve performance
-- how users can access website content through an edge network
-- why CloudFront is often paired with S3 for static websites
-
-### Simple cloud architecture thinking
-
-Even a small static website can demonstrate real cloud architecture thinking.
-
-This helped me understand:
-
-- how user requests flow through cloud services
-- how simple architectures can be documented clearly
-- why cost-effective solutions matter in cloud design
-
-## What I learned
-
-Through this project, I practiced:
-
-- how static websites can be hosted in the cloud
-- how S3 and CloudFront concepts support frontend delivery
-- how to think about simple web hosting architecture
-- how to document a small cloud project clearly
-- how static website hosting differs from server-based hosting
+> I used private S3 plus CloudFront OAC instead of a public S3 bucket because the CDN should be the only public delivery layer. The bucket policy restricts reads to the specific CloudFront distribution, and HTTP viewers are redirected to HTTPS. The next production steps would be custom DNS and certificates, release automation, and only then security controls such as WAF if the threat model needs them.
 
 ## Cost and cleanup
 
-This project is built for learning and portfolio purposes.
-
-Important cleanup principle:
-
-```text
-Delete cloud resources after testing to avoid unnecessary cost.
-```
-
-S3 storage is usually low-cost, but CloudFront distributions, storage usage, and related resources should still be reviewed and cleaned up after testing.
-
-## Future improvements
-
-Possible next improvements:
-
-- add deployment screenshots
-- add S3 bucket setup notes
-- add CloudFront distribution notes
-- add custom domain notes
-- add HTTPS / certificate notes
-- add Terraform version
-- add full cleanup proof section
-
-## Status
-
-Completed hands-on AWS static website project for learning static hosting, S3 concepts, CloudFront concepts, and simple cloud delivery architecture.
+CloudFront changes can take time to deploy or remove. After validation, empty the bucket if required, run `terraform destroy`, and verify that both the distribution and bucket were removed.
